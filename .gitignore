@@ -1,0 +1,38 @@
+# frontend/.gitignore
+
+# Dependencias
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variables de entorno (¡IMPORTANTE!)
+.env
+.env.local
+.env.production
+
+# Build de producción
+dist/
+build/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+.nyc_output/
+
+# PWA (opcional, si no quieres subir icons)
+# public/icon-*.png

@@ -1,0 +1,24 @@
+{
+  "name": "Nail Studio by Luna",
+  "short_name": "Nail Pro",
+  "description": "Reserva tu cita de uñas online",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff0f5",
+  "theme_color": "#c2567a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
