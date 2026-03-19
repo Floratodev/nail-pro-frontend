@@ -6,5 +6,5 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   // Si necesitas base path diferente en producción (opcional)
-  // base: '/mi-subruta/',
+  base: '/mi-subruta/',
 })
