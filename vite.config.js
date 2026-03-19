@@ -1,10 +1,12 @@
-// vite.config.js
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // Si necesitas base path diferente en producción (opcional)
-  base: '/mi-subruta/',
+  base: '/',  // ← esto es lo clave: fuerza rutas absolutas desde la raíz del dominio
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: true   // para ver errores claros en consola
+  }
 })
