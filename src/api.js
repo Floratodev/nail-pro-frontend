@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  NAIL PRO — SERVICIO DE API v4 (Multi-servicio + PWA)
 // ═══════════════════════════════════════════════════════════════════════════
-const BASE = process.env.NODE_ENV === "production"
-  ? process.env.REACT_APP_BACKEND_URL || "https://tu-backend.onrender.com/api"
+const BASE = import.meta.env.PROD
+  ? (import.meta.env.VITE_API_URL || "https://nail-pro-backend.onrender.com/api")
   : "/api";
 
 function obtenerToken() {
