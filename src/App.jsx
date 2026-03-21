@@ -433,15 +433,23 @@ const diaNoDisponible = (dateStr) => {
   return false;
 };
 
-// Slots de hora según el día (sábado solo mañana)
+// Slots de hora según el día y hora actual (no muestra horas pasadas para hoy)
 const getHorasDisponibles = (dateStr) => {
   if (!dateStr) return HOURS;
   const [y, m, d] = dateStr.split("-").map(Number);
   const diaSemana = new Date(y, m - 1, d).getDay();
-  if (diaSemana === 6) { // Sábado: solo mañana
-    return HOURS.filter(h => h <= "12:30");
+  let horas = diaSemana === 6 ? HOURS.filter(h => h <= "12:30") : HOURS;
+
+  // Si es hoy, filtrar las horas que ya han pasado (con 30min de margen)
+  if (dateStr === todayStr()) {
+    const ahora = new Date();
+    const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes() + 30;
+    horas = horas.filter(h => {
+      const [hh, mm] = h.split(":").map(Number);
+      return hh * 60 + mm > minutosAhora;
+    });
   }
-  return HOURS;
+  return horas;
 };
 const addDays = (dateStr, n) => {
   const d = new Date(dateStr);
@@ -1114,7 +1122,7 @@ export default function NailProApp() {
                             {DAYS_ES[(() => { const [y,m,day] = d.split("-").map(Number); return new Date(y,m-1,day).getDay(); })()]}
                           </div>
                           <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2, color: esSeleccionado ? "var(--noir)" : "var(--cream)" }}>
-                            {new Date(d).getDate()}
+                            {Number(d.split("-")[2])}
                           </div>
                           {citasDelDia.length > 0 && (
                             <div style={{ fontSize: 8, color: "var(--gold)", marginTop: 2 }}>
@@ -1143,7 +1151,7 @@ export default function NailProApp() {
                       <div key={d}
                         className={`month-calendar-day${esSeleccionado ? " selected" : esPasado ? " disabled" : ""}${citasDelDia.length > 0 ? " has-appointments" : ""}`}
                         onClick={() => !esPasado && setBooking(b => ({ ...b, date: d, time: null }))}>
-                        <span className="day-number">{new Date(d).getDate()}</span>
+                        <span className="day-number">{Number(d.split("-")[2])}</span>
                         {citasDelDia.length > 0 && (
                           <span className="appointment-count">{citasDelDia.length}</span>
                         )}
