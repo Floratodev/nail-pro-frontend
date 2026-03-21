@@ -424,8 +424,11 @@ const addDays = (dateStr, n) => {
 };
 const formatDate = dateStr => {
   if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  // Parsear manualmente para evitar el bug de zona horaria (UTC vs local)
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const DAYS_FULL = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  const d = new Date(year, month - 1, day);
+  return `${DAYS_FULL[d.getDay()]} ${day} ${MONTHS[month - 1]} ${year}`;
 };
 const getWeekDays = base => {
   const d = new Date(base);
@@ -664,10 +667,16 @@ export default function NailProApp() {
       showToast("Selecciona al menos un servicio", "error");
       return;
     }
+    // Añadir +34 automáticamente si no es email y no empieza ya por +
+    const phoneEnviar = booking.phone.includes("@")
+      ? booking.phone
+      : booking.phone.startsWith("+")
+        ? booking.phone
+        : `+34${booking.phone.replace(/\s/g, "")}`;
     try {
       await appointmentsAPI.create({
         clientName: booking.name,
-        phone: booking.phone,
+        phone: phoneEnviar,
         serviceIds: booking.services.map(s => s.id),
         date: booking.date,
         time: booking.time,
@@ -1194,7 +1203,6 @@ export default function NailProApp() {
 
               {[
                 ["Nombre completo *", "text", "María García", "name"],
-                ["Teléfono o Email *", "text", "+34 600 000 000 o email", "phone"],
               ].map(([label, tipo, placeholder, campo]) => (
                 <div key={campo} className="field" style={{ marginBottom: 16 }}>
                   <label>{label}</label>
@@ -1203,6 +1211,32 @@ export default function NailProApp() {
                     onChange={e => setBooking(b => ({ ...b, [campo]: e.target.value }))} />
                 </div>
               ))}
+
+              <div className="field" style={{ marginBottom: 16 }}>
+                <label>Teléfono o Email *</label>
+                <div style={{ position: "relative" }}>
+                  <span style={{
+                    position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+                    fontSize: 14, color: "var(--muted)", pointerEvents: "none", userSelect: "none"
+                  }}>
+                    {booking.phone?.includes("@") ? "" : "+34 "}
+                  </span>
+                  <input className="input" type="text"
+                    placeholder="600 000 000 o tu email"
+                    style={{ paddingLeft: booking.phone?.includes("@") ? 17 : 52 }}
+                    value={booking.phone}
+                    onChange={e => {
+                      let val = e.target.value;
+                      // Si escribe el +34 a mano, quitarlo para no duplicarlo
+                      if (val.startsWith("+34")) val = val.slice(3).trimStart();
+                      if (val.startsWith("34") && val.length > 9) val = val.slice(2);
+                      setBooking(b => ({ ...b, phone: val }));
+                    }} />
+                </div>
+                <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
+                  El prefijo +34 se añade automáticamente. Si usas email escríbelo tal cual.
+                </span>
+              </div>
 
               <div className="field" style={{ marginBottom: 24 }}>
                 <label>Notas adicionales (opcional)</label>
@@ -1486,8 +1520,8 @@ export default function NailProApp() {
               <h2 className="display-title" style={{ fontSize: 28, marginBottom: 20 }}>Notas de Clientas</h2>
               
               <div className="field" style={{ marginBottom: 20 }}>
-                <label>Seleccionar clienta por teléfono</label>
-                <input className="input" placeholder="+34 600 000 000"
+                <label>Buscar clienta por nombre o teléfono</label>
+                <input className="input" placeholder="Nombre o teléfono..."
                   value={selectedClientPhone}
                   onChange={e => { setSelectedClientPhone(e.target.value); loadClientNotes(e.target.value); }} />
               </div>
@@ -1506,7 +1540,7 @@ export default function NailProApp() {
                     ) : (
                       clientNotes.map(note => (
                         <div key={note.id} className="client-note-item">
-                          <div className="client-note-date">{formatDate(note.created_at?.split('T')[0])}</div>
+                          <div className="client-note-date">{note.client_name} · {formatDate(note.created_at?.split('T')[0])}</div>
                           <div>{note.note}</div>
                         </div>
                       ))
@@ -1529,14 +1563,17 @@ export default function NailProApp() {
 
               <div className="card" style={{ padding: 20, marginTop: 24 }}>
                 <div className="section-label" style={{ marginBottom: 12 }}>Últimas clientas</div>
-                {[...new Set(apts.map(a => a.phone))].slice(0, 10).map(phone => (
-                  <div key={phone}
+                {[...new Map(apts.map(a => [a.phone, a])).values()].slice(0, 10).map(apt => (
+                  <div key={apt.phone}
                     className="service-checkbox"
-                    onClick={() => { setSelectedClientPhone(phone); loadClientNotes(phone); }}
+                    onClick={() => { setSelectedClientPhone(apt.phone); loadClientNotes(apt.phone); }}
                     style={{ padding: "12px", cursor: "pointer" }}>
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>{phone}</span>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{apt.client_name}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{apt.phone}</div>
+                    </div>
                     <span style={{ fontSize: 11, color: "var(--muted)" }}>
-                      {apts.filter(a => a.phone === phone).length} citas
+                      {apts.filter(a => a.phone === apt.phone).length} citas
                     </span>
                   </div>
                 ))}
@@ -1578,16 +1615,96 @@ export default function NailProApp() {
           )}
 
           {/* PESTAÑA: ESTADÍSTICAS */}
-          {adminTab === "estadisticas" && stats && (
+          {adminTab === "estadisticas" && stats && (() => {
+            const [statsDesde, setStatsDesde] = useState("");
+            const [statsHasta, setStatsHasta] = useState("");
+
+            const aptsFiltradas = apts.filter(a => {
+              if (statsDesde && a.date < statsDesde) return false;
+              if (statsHasta && a.date > statsHasta) return false;
+              return true;
+            });
+
+            const ingresosFiltrados = aptsFiltradas
+              .filter(a => a.status === "completada")
+              .reduce((sum, a) => sum + Number(a.service_price || 0), 0);
+
+            const clientesUnicos = new Set(aptsFiltradas.map(a => a.phone)).size;
+
+            const porMesFiltrado = aptsFiltradas.reduce((acc, a) => {
+              const [y, m] = a.date.split("-");
+              const key = `${m}-${y}`;
+              if (!acc[key]) acc[key] = { month: key, citas: 0, ingresos: 0 };
+              acc[key].citas++;
+              if (a.status === "completada") acc[key].ingresos += Number(a.service_price || 0);
+              return acc;
+            }, {});
+
+            const porServicioFiltrado = aptsFiltradas
+              .filter(a => a.status !== "cancelada")
+              .reduce((acc, a) => {
+                acc[a.service_name] = (acc[a.service_name] || 0) + 1;
+                return acc;
+              }, {});
+
+            return (
             <div className="anim-slide-up">
               <div className="section-label">Análisis</div>
-              <h2 className="display-title" style={{ fontSize: 28, marginBottom: 24 }}>Estadísticas</h2>
+              <h2 className="display-title" style={{ fontSize: 28, marginBottom: 16 }}>Estadísticas</h2>
+
+              {/* Filtro de fechas */}
+              <div className="card" style={{ padding: 16, marginBottom: 20, background: "rgba(201,149,108,.05)" }}>
+                <div className="section-label" style={{ marginBottom: 10 }}>Filtrar por período</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div className="field">
+                    <label>Desde</label>
+                    <input className="input" type="date" value={statsDesde}
+                      onChange={e => setStatsDesde(e.target.value)} />
+                  </div>
+                  <div className="field">
+                    <label>Hasta</label>
+                    <input className="input" type="date" value={statsHasta}
+                      onChange={e => setStatsHasta(e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                  {[
+                    ["Este mes", () => {
+                      const hoy = new Date();
+                      setStatsDesde(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,"0")}-01`);
+                      setStatsHasta(todayStr());
+                    }],
+                    ["Último mes", () => {
+                      const hoy = new Date();
+                      const primerDiaMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth()-1, 1);
+                      const ultimoDiaMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+                      setStatsDesde(primerDiaMesAnterior.toISOString().split("T")[0]);
+                      setStatsHasta(ultimoDiaMesAnterior.toISOString().split("T")[0]);
+                    }],
+                    ["Este año", () => {
+                      setStatsDesde(`${new Date().getFullYear()}-01-01`);
+                      setStatsHasta(todayStr());
+                    }],
+                    ["Todo", () => { setStatsDesde(""); setStatsHasta(""); }],
+                  ].map(([label, fn]) => (
+                    <button key={label} className="btn-ghost" style={{ fontSize: 11, padding: "6px 12px" }} onClick={fn}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {(statsDesde || statsHasta) && (
+                  <div style={{ fontSize: 11, color: "var(--gold)", marginTop: 8 }}>
+                    Mostrando {aptsFiltradas.length} citas {statsDesde ? `desde ${formatDate(statsDesde)}` : ""} {statsHasta ? `hasta ${formatDate(statsHasta)}` : ""}
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
                 {[
-                  ["Ingresos totales", `${stats.totalRevenue}€`, "💰"],
-                  ["Total de citas", apts.length, "📋"],
-                  ["Clientes únicos", stats.totalClients, "👥"],
-                  ["Tasa completadas", `${apts.length ? Math.round(apts.filter(a => a.status === "completada").length / apts.length * 100) : 0}%`, "✅"],
+                  ["Ingresos", `${ingresosFiltrados.toFixed(2)}€`, "💰"],
+                  ["Total citas", aptsFiltradas.length, "📋"],
+                  ["Clientes únicos", clientesUnicos, "👥"],
+                  ["Tasa completadas", `${aptsFiltradas.length ? Math.round(aptsFiltradas.filter(a => a.status === "completada").length / aptsFiltradas.length * 100) : 0}%`, "✅"],
                 ].map(([label, valor, emoji]) => (
                   <div key={label} className="kpi">
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -1600,9 +1717,48 @@ export default function NailProApp() {
                   </div>
                 ))}
               </div>
-              {/* Gráficas... (mismo código que antes) */}
+
+              {/* Gráfica por mes */}
+              {Object.keys(porMesFiltrado).length > 0 && (
+                <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+                  <div className="section-label" style={{ marginBottom: 12 }}>Citas e ingresos por mes</div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={Object.values(porMesFiltrado).sort((a,b) => a.month.localeCompare(b.month))}>
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="citas" fill="#c2567a" name="Citas" radius={[4,4,0,0]} />
+                      <Bar dataKey="ingresos" fill="#e8729a" name="Ingresos €" radius={[4,4,0,0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Servicios más populares */}
+              {Object.keys(porServicioFiltrado).length > 0 && (
+                <div className="card" style={{ padding: 20 }}>
+                  <div className="section-label" style={{ marginBottom: 12 }}>Servicios más solicitados</div>
+                  {Object.entries(porServicioFiltrado)
+                    .sort((a,b) => b[1] - a[1])
+                    .map(([nombre, count], i) => {
+                      const max = Math.max(...Object.values(porServicioFiltrado));
+                      return (
+                        <div key={nombre} style={{ marginBottom: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ fontSize: 13 }}>{nombre}</span>
+                            <span style={{ fontSize: 13, color: "var(--gold)", fontWeight: 600 }}>{count}</span>
+                          </div>
+                          <div className="progress-bar">
+                            <div className="progress-fill" style={{ width: `${(count/max)*100}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* PESTAÑA: SERVICIOS */}
           {adminTab === "servicios" && (
@@ -1801,6 +1957,17 @@ export default function NailProApp() {
                   <span style={{ fontSize: 13, fontWeight: 500, maxWidth: "60%", textAlign: "right" }}>{v}</span>
                 </div>
               ))}
+
+              {/* Foto de inspiración */}
+              {selApt.inspiration_url && (
+                <div style={{ marginTop: 16 }}>
+                  <div className="section-label" style={{ marginBottom: 8 }}>Foto de inspiración</div>
+                  <img src={selApt.inspiration_url} alt="Inspiración"
+                    onClick={() => setLightbox({ url: selApt.inspiration_url, caption: "Foto de inspiración" })}
+                    style={{ width: "100%", borderRadius: 12, maxHeight: 220, objectFit: "cover", border: "1px solid var(--border2)", cursor: "pointer" }} />
+                  <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Toca la foto para ampliarla</p>
+                </div>
+              )}
               
               {/* Notas de la clienta */}
               <div style={{ marginTop: 16 }}>
