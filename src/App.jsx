@@ -557,6 +557,7 @@ export default function NailProApp() {
   // ── Filtros de estadísticas ──
   const [statsDesde, setStatsDesde] = useState("");
   const [statsHasta, setStatsHasta] = useState("");
+  const [confirmando, setConfirmando] = useState(false);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -704,7 +705,8 @@ export default function NailProApp() {
       showToast("Selecciona al menos un servicio", "error");
       return;
     }
-    // Añadir +34 automáticamente si no es email y no empieza ya por +
+    if (confirmando) return;
+    setConfirmando(true);
     const phoneEnviar = booking.phone.includes("@")
       ? booking.phone
       : booking.phone.startsWith("+")
@@ -723,6 +725,8 @@ export default function NailProApp() {
       setView("confirm");
     } catch (err) {
       showToast(err.message, "error");
+    } finally {
+      setConfirmando(false);
     }
   };
 
@@ -1330,9 +1334,9 @@ export default function NailProApp() {
               <div style={{ display: "flex", gap: 10 }}>
                 <button className="btn-outline" style={{ flex: 1 }} onClick={() => setStep(2)}>← Atrás</button>
                 <button className="btn-primary" style={{ flex: 2 }}
-                  disabled={!booking.name || !booking.phone || uploadingPhoto}
+                  disabled={!booking.name || !booking.phone || uploadingPhoto || confirmando}
                   onClick={handleConfirmBooking}>
-                  {uploadingPhoto ? "Subiendo foto..." : `Confirmar Cita (${totalPrice}€)`}
+                  {confirmando ? "Confirmando..." : uploadingPhoto ? "Subiendo foto..." : `Confirmar Cita (${totalPrice}€)`}
                 </button>
               </div>
             </div>
