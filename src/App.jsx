@@ -521,6 +521,10 @@ export default function NailProApp() {
   const [selectedClientPhone, setSelectedClientPhone] = useState("");
   const [newNote, setNewNote] = useState("");
 
+  // ── Filtros de estadísticas ──
+  const [statsDesde, setStatsDesde] = useState("");
+  const [statsHasta, setStatsHasta] = useState("");
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -1383,6 +1387,31 @@ export default function NailProApp() {
     const todayApts = apts.filter(a => a.date === todayStr() && a.status !== "cancelada").sort((a, b) => a.time.localeCompare(b.time));
     const allApts = [...apts].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
+    // ── Cálculos de estadísticas con filtro ──
+    const aptsFiltradas = apts.filter(a => {
+      if (statsDesde && a.date < statsDesde) return false;
+      if (statsHasta && a.date > statsHasta) return false;
+      return true;
+    });
+    const ingresosFiltrados = aptsFiltradas
+      .filter(a => a.status === "completada")
+      .reduce((sum, a) => sum + Number(a.service_price || 0), 0);
+    const clientesUnicos = new Set(aptsFiltradas.map(a => a.phone)).size;
+    const porMesFiltrado = aptsFiltradas.reduce((acc, a) => {
+      const [y, m] = a.date.split("-");
+      const key = `${m}-${y}`;
+      if (!acc[key]) acc[key] = { month: key, citas: 0, ingresos: 0 };
+      acc[key].citas++;
+      if (a.status === "completada") acc[key].ingresos += Number(a.service_price || 0);
+      return acc;
+    }, {});
+    const porServicioFiltrado = aptsFiltradas
+      .filter(a => a.status !== "cancelada")
+      .reduce((acc, a) => {
+        acc[a.service_name] = (acc[a.service_name] || 0) + 1;
+        return acc;
+      }, {});
+
     return (
       <div style={{ minHeight: "100vh", background: "var(--noir)" }}>
         <nav className="nav" style={{ background: "rgba(255,255,255,0.97)", borderBottom: "1px solid var(--border2)", boxShadow: "0 2px 12px rgba(194,86,122,0.08)" }}>
@@ -1615,39 +1644,7 @@ export default function NailProApp() {
           )}
 
           {/* PESTAÑA: ESTADÍSTICAS */}
-          {adminTab === "estadisticas" && stats && (() => {
-            const [statsDesde, setStatsDesde] = useState("");
-            const [statsHasta, setStatsHasta] = useState("");
-
-            const aptsFiltradas = apts.filter(a => {
-              if (statsDesde && a.date < statsDesde) return false;
-              if (statsHasta && a.date > statsHasta) return false;
-              return true;
-            });
-
-            const ingresosFiltrados = aptsFiltradas
-              .filter(a => a.status === "completada")
-              .reduce((sum, a) => sum + Number(a.service_price || 0), 0);
-
-            const clientesUnicos = new Set(aptsFiltradas.map(a => a.phone)).size;
-
-            const porMesFiltrado = aptsFiltradas.reduce((acc, a) => {
-              const [y, m] = a.date.split("-");
-              const key = `${m}-${y}`;
-              if (!acc[key]) acc[key] = { month: key, citas: 0, ingresos: 0 };
-              acc[key].citas++;
-              if (a.status === "completada") acc[key].ingresos += Number(a.service_price || 0);
-              return acc;
-            }, {});
-
-            const porServicioFiltrado = aptsFiltradas
-              .filter(a => a.status !== "cancelada")
-              .reduce((acc, a) => {
-                acc[a.service_name] = (acc[a.service_name] || 0) + 1;
-                return acc;
-              }, {});
-
-            return (
+          {adminTab === "estadisticas" && stats && (
             <div className="anim-slide-up">
               <div className="section-label">Análisis</div>
               <h2 className="display-title" style={{ fontSize: 28, marginBottom: 16 }}>Estadísticas</h2>
@@ -1757,8 +1754,7 @@ export default function NailProApp() {
                 </div>
               )}
             </div>
-            );
-          })()}
+          )}
 
           {/* PESTAÑA: SERVICIOS */}
           {adminTab === "servicios" && (
