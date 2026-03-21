@@ -480,12 +480,11 @@ const getMonthDays = (year, month) => {
   const lastDay = new Date(year, month + 1, 0);
   const days = [];
   const startOffset = (firstDay.getDay() + 6) % 7;
-  
   for (let i = 0; i < startOffset; i++) {
     days.push(null);
   }
   for (let i = 1; i <= lastDay.getDate(); i++) {
-    days.push(new Date(year, month, i).toISOString().split("T")[0]);
+    days.push(`${year}-${String(month + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`);
   }
   return days;
 };
