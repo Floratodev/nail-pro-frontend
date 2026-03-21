@@ -1,37 +1,44 @@
-const CACHE_NAME = 'nail-pro-v' + '20260321-2';
+const CACHE_NAME = 'nail-pro-v20260321-3';
 const urlsToCache = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', event => {
-  self.skipWaiting(); // Activa el nuevo SW inmediatamente sin esperar
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
   );
 });
 
 self.addEventListener('fetch', event => {
-  // Los assets JS/CSS con hash siempre se piden a la red (ya tienen su propio caché del navegador)
-  if (event.request.url.includes('/assets/')) {
-    event.respondWith(fetch(event.request));
+  const req = event.request;
+
+  // Nunca cachear: peticiones POST/PUT/PATCH/DELETE, ni llamadas a la API
+  if (req.method !== 'GET') return;
+  if (req.url.includes('/api/')) return;
+  if (req.url.includes('onrender.com')) return;
+
+  // Assets con hash: siempre red primero
+  if (req.url.includes('/assets/')) {
+    event.respondWith(fetch(req));
     return;
   }
-  // Para el resto, red primero y caché como fallback
+
+  // Para el resto: red primero, caché como fallback offline
   event.respondWith(
-    fetch(event.request)
+    fetch(req)
       .then(response => {
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => caches.match(req))
   );
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames =>
-      Promise.all(
-        cacheNames.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
-      )
-    ).then(() => self.clients.claim()) // Toma control de todas las pestañas abiertas
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
   );
 });
+
