@@ -408,7 +408,7 @@ const HOURS = [
   "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30",
   "15:30", "16:00", "16:30", "17:00", "17:30", "18:00",
 ];
-const DAYS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DAYS_ES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
@@ -431,14 +431,14 @@ const formatDate = dateStr => {
   return `${DAYS_FULL[d.getDay()]} ${day} ${MONTHS[month - 1]} ${year}`;
 };
 const getWeekDays = base => {
-  const d = new Date(base);
-  const day = d.getDay();
-  const mon = new Date(d);
-  mon.setDate(d.getDate() - ((day + 6) % 7));
+  const [y, m, day] = base.split("-").map(Number);
+  const d = new Date(y, m - 1, day);
+  const dayOfWeek = d.getDay();
+  const mon = new Date(y, m - 1, day - ((dayOfWeek + 6) % 7));
   return Array.from({ length: 7 }, (_, i) => {
     const nd = new Date(mon);
     nd.setDate(mon.getDate() + i);
-    return nd.toISOString().split("T")[0];
+    return `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,"0")}-${String(nd.getDate()).padStart(2,"0")}`;
   });
 };
 const getMonthDays = (year, month) => {
@@ -1085,7 +1085,7 @@ export default function NailProApp() {
                           className={`day-cell${esSeleccionado ? " selected" : esPasado ? " disabled" : ""}${citasDelDia.length > 0 ? " has-appointments" : ""}`}
                           onClick={() => !esPasado && setBooking(b => ({ ...b, date: d, time: null }))}>
                           <div style={{ fontSize: 9, letterSpacing: "1px", textTransform: "uppercase", color: esSeleccionado ? "rgba(0,0,0,.7)" : "var(--muted)" }}>
-                            {DAYS_ES[new Date(d).getDay()]}
+                            {DAYS_ES[(() => { const [y,m,day] = d.split("-").map(Number); return new Date(y,m-1,day).getDay(); })()]}
                           </div>
                           <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2, color: esSeleccionado ? "var(--noir)" : "var(--cream)" }}>
                             {new Date(d).getDate()}
