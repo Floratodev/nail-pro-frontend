@@ -297,19 +297,19 @@ textarea.input { resize: vertical; min-height: 80px; }
 .month-calendar {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 2px;
   background: rgba(255,255,255,0.9);
   border-radius: 12px;
-  padding: 12px;
+  padding: 6px;
   border: 1px solid var(--border2);
 }
 .month-calendar-header {
-  font-size: 10px;
+  font-size: 9px;
   text-align: center;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 8px 0;
+  letter-spacing: 0;
+  padding: 4px 0;
 }
 .month-calendar-day {
   aspect-ratio: 1;
@@ -317,12 +317,14 @@ textarea.input { resize: vertical; min-height: 80px; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: 6px;
+  font-size: 11px;
   cursor: pointer;
   transition: all .2s;
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.5);
+  min-width: 0;
+  overflow: hidden;
 }
 .month-calendar-day:hover:not(.disabled) {
   border-color: var(--border2);
@@ -342,11 +344,12 @@ textarea.input { resize: vertical; min-height: 80px; }
 }
 .month-calendar-day .day-number {
   font-weight: 600;
+  font-size: 11px;
 }
 .month-calendar-day .appointment-count {
-  font-size: 8px;
+  font-size: 7px;
   color: var(--gold);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 /* Multi-servicio selection */
@@ -416,7 +419,30 @@ const MONTHS = [
 const PIE_COLORS = ["#c9956c", "#d4607a", "#9b7dd4", "#6db89a", "#6a9fd4", "#d4b86a", "#ef4444"];
 
 // ─── Funciones auxiliares ─────────────────────────────────────────────────────
-const todayStr = () => new Date().toISOString().split("T")[0];
+const todayStr = () => {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`;
+};
+
+// Devuelve true si el día NO se puede reservar (pasado, domingo, o sábado tarde)
+const diaNoDisponible = (dateStr) => {
+  if (dateStr < todayStr()) return true;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const diaSemana = new Date(y, m - 1, d).getDay(); // 0=Dom, 6=Sáb
+  if (diaSemana === 0) return true; // Domingo: cerrado
+  return false;
+};
+
+// Slots de hora según el día (sábado solo mañana)
+const getHorasDisponibles = (dateStr) => {
+  if (!dateStr) return HOURS;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const diaSemana = new Date(y, m - 1, d).getDay();
+  if (diaSemana === 6) { // Sábado: solo mañana
+    return HOURS.filter(h => h <= "12:30");
+  }
+  return HOURS;
+};
 const addDays = (dateStr, n) => {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + n);
@@ -1077,7 +1103,7 @@ export default function NailProApp() {
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 24 }}>
                     {weekDays.map(d => {
-                      const esPasado = d < todayStr();
+                      const esPasado = diaNoDisponible(d);
                       const esSeleccionado = booking.date === d;
                       const citasDelDia = apts.filter(a => a.date === d && a.status !== 'cancelada');
                       return (
@@ -1110,7 +1136,7 @@ export default function NailProApp() {
                   ))}
                   {monthDays.map((d, i) => {
                     if (!d) return <div key={i} />;
-                    const esPasado = d < todayStr();
+                    const esPasado = diaNoDisponible(d);
                     const esSeleccionado = booking.date === d;
                     const citasDelDia = apts.filter(a => a.date === d && a.status !== 'cancelada');
                     return (
@@ -1153,7 +1179,7 @@ export default function NailProApp() {
                     Horarios — {formatDate(booking.date)} · {formatDuration(totalDuration)}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 24 }}>
-                    {HOURS.map(h => {
+                    {getHorasDisponibles(booking.date).map(h => {
                       const estaOcupado = booked.includes(h);
                       const estaSeleccionado = booking.time === h;
                       return (
@@ -1443,7 +1469,7 @@ export default function NailProApp() {
           {/* PESTAÑA: AGENDA */}
           {adminTab === "agenda" && (
             <div className="anim-slide-up">
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 28 }}>
                 {[
                   ["Hoy", todayApts.length, "📅"],
                   ["Pendientes", apts.filter(a => a.status === "pendiente").length, "⏳"],
@@ -1488,7 +1514,7 @@ export default function NailProApp() {
                     const esHoy = d === todayStr();
                     return (
                       <div key={d} className={`month-calendar-day${esHoy ? " selected" : ""}`}
-                        style={{ minHeight: 60, padding: 4 }}>
+                        style={{ minHeight: 40, padding: 2 }}>
                         <span className="day-number" style={{ fontSize: 11 }}>{new Date(d).getDate()}</span>
                         {citasDelDia.length > 0 && (
                           <div style={{ fontSize: 8, color: "var(--gold)", marginTop: 2 }}>
