@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, CalendarChart
+  PieChart, Pie, Cell, Legend
 } from "recharts";
 import { authAPI, servicesAPI, appointmentsAPI, galleryAPI, salonAPI, statsAPI, clientNotesAPI } from "./api";
 
