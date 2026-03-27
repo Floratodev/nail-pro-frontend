@@ -567,6 +567,9 @@ export default function NailProApp() {
   const [citasFiltro, setCitasFiltro] = useState("todas");
   const [citasEstado, setCitasEstado] = useState("todas");
 
+  // ── Día seleccionado en agenda ──
+  const [agendaDia, setAgendaDia] = useState(todayStr());
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -1590,22 +1593,25 @@ export default function NailProApp() {
                     if (!d) return <div key={i} />;
                     const citasDelDia = apts.filter(a => a.date === d && a.status !== 'cancelada');
                     const esHoy = d === todayStr();
+                    const esSel = d === agendaDia;
                     return (
-                      <div key={d} className={`month-calendar-day${esHoy ? " selected" : ""}`}
-                        style={{ minHeight: 40, padding: 2 }}>
-                        <span className="day-number" style={{ fontSize: 11 }}>{new Date(d).getDate()}</span>
+                      <div key={d}
+                        className={`month-calendar-day${esSel ? " selected" : ""}`}
+                        onClick={() => setAgendaDia(d)}
+                        style={{ minHeight: 40, padding: 2, cursor: "pointer", outline: esHoy && !esSel ? "2px solid var(--gold)" : "none" }}>
+                        <span className="day-number" style={{ fontSize: 11, color: esHoy && !esSel ? "var(--gold2)" : undefined }}>{new Date(d).getDate()}</span>
                         {citasDelDia.length > 0 && (
-                          <div style={{ fontSize: 8, color: "var(--gold)", marginTop: 2 }}>
-                            {citasDelDia.length} citas
+                          <div style={{ fontSize: 8, color: esSel ? "var(--noir)" : "var(--gold)", marginTop: 2 }}>
+                            {citasDelDia.length} cita{citasDelDia.length !== 1 ? "s" : ""}
                           </div>
                         )}
                         {citasDelDia.slice(0, 2).map(a => (
-                          <div key={a.id} style={{ fontSize: 7, background: "rgba(201,149,108,.12)", borderRadius: 2, padding: "1px 3px", marginTop: 1, color: "var(--gold)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div key={a.id} style={{ fontSize: 7, background: esSel ? "rgba(255,255,255,0.3)" : "rgba(201,149,108,.12)", borderRadius: 2, padding: "1px 3px", marginTop: 1, color: esSel ? "var(--noir)" : "var(--gold)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {a.time}
                           </div>
                         ))}
                         {citasDelDia.length > 2 && (
-                          <div style={{ fontSize: 7, color: "var(--muted)" }}>+{citasDelDia.length - 2}</div>
+                          <div style={{ fontSize: 7, color: esSel ? "rgba(255,255,255,0.8)" : "var(--muted)" }}>+{citasDelDia.length - 2}</div>
                         )}
                       </div>
                     );
@@ -1613,106 +1619,256 @@ export default function NailProApp() {
                 </div>
               </div>
 
-              <div className="section-label">Citas de hoy</div>
-              <h2 className="display-title" style={{ fontSize: 24, marginBottom: 16 }}>Agenda del día</h2>
-              {todayApts.length === 0 ? (
-                <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
-                  <div style={{ fontSize: 40, marginBottom: 12 }}>🌸</div>
-                  <div className="display-title" style={{ fontSize: 18 }}>No hay citas hoy</div>
-                </div>
-              ) : (
-                todayApts.map(a => (
-                  <div key={a.id} className="card card-lift" style={{ padding: "18px 22px", marginBottom: 12 }}
-                    onClick={() => { setSelApt(a); setSelectedClientPhone(a.phone); loadClientNotes(a.phone); }}>
-                    <div className="row">
-                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                        <span style={{ fontSize: 30 }}>{a.service_emoji}</span>
-                        <div>
-                          <div className="display-title" style={{ fontSize: 18 }}>{a.client_name}</div>
-                          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{a.time} · {a.service_name}</div>
-                          <div style={{ fontSize: 11, color: "var(--gold)" }}>⏱ {formatDuration(a.total_duration || 60)}</div>
+              {/* Citas del día seleccionado */}
+              {(() => {
+                const citasDia = apts.filter(a => a.date === agendaDia && a.status !== "cancelada").sort((a, b) => a.time.localeCompare(b.time));
+                const esHoy = agendaDia === todayStr();
+                return (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                      <div>
+                        <div className="section-label" style={{ marginBottom: 2 }}>
+                          {esHoy ? "Citas de hoy" : "Citas del día"}
                         </div>
+                        <h2 className="display-title" style={{ fontSize: 22 }}>
+                          {esHoy ? "🌸 Hoy" : formatDate(agendaDia)}
+                          <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 400, marginLeft: 10 }}>
+                            {citasDia.length} cita{citasDia.length !== 1 ? "s" : ""}
+                          </span>
+                        </h2>
                       </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span className={`badge badge-${a.status}`}>{a.status}</span>
-                        <button className="btn-green" onClick={e => { e.stopPropagation(); openWA(a.phone, waMsg(a).recordatorio); }}>
-                          📲 WA
+                      {!esHoy && (
+                        <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 12px", marginLeft: "auto" }}
+                          onClick={() => setAgendaDia(todayStr())}>
+                          Volver a hoy
                         </button>
-                      </div>
+                      )}
                     </div>
-                  </div>
-                ))
-              )}
+                    {citasDia.length === 0 ? (
+                      <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
+                        <div style={{ fontSize: 40, marginBottom: 12 }}>🌸</div>
+                        <div className="display-title" style={{ fontSize: 18 }}>No hay citas este día</div>
+                        <div style={{ fontSize: 13, marginTop: 8 }}>Selecciona otro día en el calendario</div>
+                      </div>
+                    ) : (
+                      citasDia.map(a => (
+                        <div key={a.id} className="card card-lift" style={{ padding: "18px 22px", marginBottom: 12 }}
+                          onClick={() => { setSelApt(a); setSelectedClientPhone(a.phone); loadClientNotes(a.phone); }}>
+                          <div className="row">
+                            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                              <div style={{ textAlign: "center", minWidth: 44 }}>
+                                <div style={{ fontSize: 24 }}>{a.service_emoji}</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--gold2)" }}>{a.time}</div>
+                              </div>
+                              <div>
+                                <div className="display-title" style={{ fontSize: 17 }}>{a.client_name}</div>
+                                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{a.service_name}</div>
+                                <div style={{ fontSize: 11, color: "var(--gold)", marginTop: 2 }}>⏱ {formatDuration(a.total_duration || 60)} · {a.service_price}€</div>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                              <span className={`badge badge-${a.status}`}>{a.status}</span>
+                              <button className="btn-green" onClick={e => { e.stopPropagation(); openWA(a.phone, waMsg(a).recordatorio); }}>
+                                📲 WA
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 
           {/* PESTAÑA: CLIENTAS (NOTAS) */}
-          {adminTab === "clientas" && (
-            <div className="anim-slide-up">
-              <div className="section-label">Historial</div>
-              <h2 className="display-title" style={{ fontSize: 28, marginBottom: 20 }}>Notas de Clientas</h2>
-              
-              <div className="field" style={{ marginBottom: 20 }}>
-                <label>Buscar clienta por nombre o teléfono</label>
-                <input className="input" placeholder="Nombre o teléfono..."
-                  value={selectedClientPhone}
-                  onChange={e => { setSelectedClientPhone(e.target.value); loadClientNotes(e.target.value); }} />
-              </div>
+          {adminTab === "clientas" && (() => {
+            // Construir lista de clientas únicas por teléfono
+            const clientasMap = new Map();
+            [...apts].sort((a, b) => b.date.localeCompare(a.date)).forEach(a => {
+              if (!clientasMap.has(a.phone)) {
+                clientasMap.set(a.phone, {
+                  phone: a.phone,
+                  name: a.client_name,
+                  ultimaCita: a.date,
+                  totalCitas: 0,
+                  totalGastado: 0,
+                });
+              }
+              const c = clientasMap.get(a.phone);
+              c.totalCitas++;
+              if (a.status === "completada") c.totalGastado += Number(a.service_price || 0);
+            });
+            const todasClientas = [...clientasMap.values()];
+            const clientasFiltradas = todasClientas.filter(c =>
+              !selectedClientPhone ||
+              c.name.toLowerCase().includes(selectedClientPhone.toLowerCase()) ||
+              c.phone.includes(selectedClientPhone)
+            );
 
-              {selectedClientPhone && (
-                <>
-                  <div className="client-notes-panel">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>Historial de notas</span>
-                      <span style={{ fontSize: 11, color: "var(--muted)" }}>{clientNotes.length} notas</span>
-                    </div>
-                    {clientNotes.length === 0 ? (
-                      <div style={{ textAlign: "center", color: "var(--muted)", padding: 20 }}>
-                        No hay notas para esta clienta
+            return (
+              <div className="anim-slide-up">
+                <div className="section-label">Directorio</div>
+                <h2 className="display-title" style={{ fontSize: 28, marginBottom: 16 }}>Clientas</h2>
+
+                {/* Buscador */}
+                <div className="field" style={{ marginBottom: 20 }}>
+                  <input className="input" placeholder="🔍 Buscar por nombre o teléfono..."
+                    value={selectedClientPhone}
+                    onChange={e => {
+                      setSelectedClientPhone(e.target.value);
+                      setClientNotes([]);
+                    }} />
+                </div>
+
+                {/* Lista de clientas */}
+                {!selectedClientPhone || clientasFiltradas.length > 1 ? (
+                  <div style={{ marginBottom: 24 }}>
+                    {clientasFiltradas.length === 0 ? (
+                      <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
+                        <div style={{ fontSize: 36, marginBottom: 10 }}>🔍</div>
+                        <div className="display-title" style={{ fontSize: 18 }}>Sin resultados</div>
                       </div>
                     ) : (
-                      clientNotes.map(note => (
-                        <div key={note.id} className="client-note-item">
-                          <div className="client-note-date">{note.client_name} · {formatDate(note.created_at?.split('T')[0])}</div>
-                          <div>{note.note}</div>
+                      clientasFiltradas.map(c => (
+                        <div key={c.phone} className="card card-lift" style={{ padding: "14px 18px", marginBottom: 8 }}
+                          onClick={() => { setSelectedClientPhone(c.phone); loadClientNotes(c.phone); }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            {/* Avatar inicial */}
+                            <div style={{
+                              width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+                              background: "linear-gradient(135deg, var(--gold), var(--rose))",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 18, color: "var(--noir)", fontWeight: 700,
+                            }}>
+                              {c.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 15, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+                              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{c.phone}</div>
+                            </div>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontSize: 13, color: "var(--gold2)", fontWeight: 600 }}>{c.totalCitas} cita{c.totalCitas !== 1 ? "s" : ""}</div>
+                              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{c.totalGastado > 0 ? `${c.totalGastado}€` : "—"}</div>
+                            </div>
+                            <div style={{ fontSize: 16, color: "var(--muted)", marginLeft: 4 }}>›</div>
+                          </div>
                         </div>
                       ))
                     )}
                   </div>
+                ) : null}
 
-                  <div className="field" style={{ marginTop: 16 }}>
-                    <label>Añadir nueva nota</label>
-                    <textarea className="input" placeholder="Ej: Prefiere esmalte semipermanente, alérgica a..."
-                      value={newNote}
-                      onChange={e => setNewNote(e.target.value)}
-                      style={{ minHeight: 100 }} />
-                    <button className="btn-primary btn-full" style={{ marginTop: 12 }}
-                      onClick={handleAddClientNote} disabled={!newNote.trim()}>
-                      Guardar Nota
-                    </button>
-                  </div>
-                </>
-              )}
+                {/* Panel de notas de la clienta seleccionada */}
+                {selectedClientPhone && clientasFiltradas.length === 1 && (() => {
+                  const clienta = clientasFiltradas[0];
+                  const citasClienta = apts.filter(a => a.phone === clienta.phone).sort((a, b) => b.date.localeCompare(a.date));
+                  return (
+                    <div className="anim-slide-up">
+                      {/* Cabecera clienta */}
+                      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                          <div style={{
+                            width: 52, height: 52, borderRadius: "50%",
+                            background: "linear-gradient(135deg, var(--gold), var(--rose))",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 22, color: "var(--noir)", fontWeight: 700, flexShrink: 0,
+                          }}>
+                            {clienta.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div className="display-title" style={{ fontSize: 20 }}>{clienta.name}</div>
+                            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{clienta.phone}</div>
+                            <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                              <span style={{ fontSize: 11, color: "var(--gold)" }}>💅 {clienta.totalCitas} citas</span>
+                              {clienta.totalGastado > 0 && <span style={{ fontSize: 11, color: "var(--gold)" }}>💰 {clienta.totalGastado}€</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <button className="btn-green" style={{ fontSize: 11 }}
+                              onClick={() => openWA(clienta.phone, `Hola ${clienta.name}! 💅`)}>
+                              📲 WA
+                            </button>
+                            <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 10px" }}
+                              onClick={() => { setSelectedClientPhone(""); setClientNotes([]); }}>
+                              ← Volver
+                            </button>
+                          </div>
+                        </div>
+                      </div>
 
-              <div className="card" style={{ padding: 20, marginTop: 24 }}>
-                <div className="section-label" style={{ marginBottom: 12 }}>Últimas clientas</div>
-                {[...new Map(apts.map(a => [a.phone, a])).values()].slice(0, 10).map(apt => (
-                  <div key={apt.phone}
-                    className="service-checkbox"
-                    onClick={() => { setSelectedClientPhone(apt.phone); loadClientNotes(apt.phone); }}
-                    style={{ padding: "12px", cursor: "pointer" }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{apt.client_name}</div>
-                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{apt.phone}</div>
+                      {/* Historial de citas */}
+                      {citasClienta.length > 0 && (
+                        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                          <div className="section-label" style={{ marginBottom: 12 }}>Historial de citas</div>
+                          {citasClienta.map(a => (
+                            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--border)" }}
+                              onClick={() => { setSelApt(a); loadClientNotes(a.phone); }}>
+                              <span style={{ fontSize: 20 }}>{a.service_emoji}</span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>{a.service_name}</div>
+                                <div style={{ fontSize: 11, color: "var(--muted)" }}>{formatDate(a.date)} · {a.time}</div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <span className={`badge badge-${a.status}`}>{a.status}</span>
+                                <div style={{ fontSize: 12, color: "var(--gold2)", fontWeight: 600, marginTop: 4 }}>{a.service_price}€</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Notas */}
+                      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                          <div className="section-label" style={{ marginBottom: 0 }}>Notas</div>
+                          <span style={{ fontSize: 11, color: "var(--muted)" }}>{clientNotes.length} nota{clientNotes.length !== 1 ? "s" : ""}</span>
+                        </div>
+                        {clientNotes.length === 0 ? (
+                          <div style={{ textAlign: "center", color: "var(--muted)", padding: "16px 0", fontSize: 13 }}>
+                            Sin notas todavía
+                          </div>
+                        ) : (
+                          clientNotes.map(note => (
+                            <div key={note.id} className="client-note-item">
+                              <div className="client-note-date">{formatDate(note.created_at?.split('T')[0])}</div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                                <div style={{ flex: 1 }}>{note.note}</div>
+                                <button className="btn-danger" style={{ padding: "4px 8px", fontSize: 11, flexShrink: 0 }}
+                                  onClick={async () => {
+                                    try {
+                                      await clientNotesAPI.delete(note.id);
+                                      await loadClientNotes(clienta.phone);
+                                      showToast("Nota eliminada");
+                                    } catch { showToast("Error", "error"); }
+                                  }}>
+                                  🗑️
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Nueva nota */}
+                      <div className="card" style={{ padding: 16 }}>
+                        <div className="section-label" style={{ marginBottom: 10 }}>Añadir nota</div>
+                        <textarea className="input" placeholder="Ej: Prefiere semipermanente, alérgica a..."
+                          value={newNote}
+                          onChange={e => setNewNote(e.target.value)}
+                          style={{ minHeight: 90, marginBottom: 10 }} />
+                        <button className="btn-primary btn-full"
+                          onClick={handleAddClientNote} disabled={!newNote.trim()}>
+                          Guardar nota
+                        </button>
+                      </div>
                     </div>
-                    <span style={{ fontSize: 11, color: "var(--muted)" }}>
-                      {apts.filter(a => a.phone === apt.phone).length} citas
-                    </span>
-                  </div>
-                ))}
+                  );
+                })()}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* PESTAÑA: CITAS */}
           {adminTab === "citas" && (
