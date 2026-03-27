@@ -559,6 +559,14 @@ export default function NailProApp() {
   const [statsHasta, setStatsHasta] = useState("");
   const [confirmando, setConfirmando] = useState(false);
 
+  // ── Edición de citas ──
+  const [editApt, setEditApt] = useState(null);
+  const [editAptServices, setEditAptServices] = useState([]);
+
+  // ── Filtro vista de citas ──
+  const [citasFiltro, setCitasFiltro] = useState("todas");
+  const [citasEstado, setCitasEstado] = useState("todas");
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -601,12 +609,14 @@ export default function NailProApp() {
   useEffect(() => {
     const cargarDatos = async () => {
       try {
-        const [salonData, servicesData] = await Promise.all([
+        const [salonData, servicesData, galData] = await Promise.all([
           salonAPI.get().catch(() => ({ name: "Nail Studio", tagline: "...", whatsapp: "", instagram: "", address: "Cardenal Spínola 68, Los Palacios y Villafranca" })),
           servicesAPI.getAll().catch(() => []),
+          galleryAPI.getAll().catch(() => []),
         ]);
         setSalon(salonData);
         setServices(servicesData);
+        setGallery(galData);
       } catch (error) {
         console.error("❌ Error cargando datos:", error);
         showToast("Error de conexión. Recarga la página.", "error");
@@ -821,6 +831,63 @@ export default function NailProApp() {
       await salonAPI.update(salon);
       setEditSalon(false);
       showToast("Configuración guardada ✓");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const handleDeleteApt = async (id) => {
+    try {
+      await appointmentsAPI.delete(id);
+      await loadAdminData();
+      setSelApt(null);
+      showToast("Cita eliminada");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const handleEditApt = (apt) => {
+    // Intentar reconstruir los servicios desde services_json si existe
+    let svcsActuales = [];
+    try {
+      const parsed = JSON.parse(apt.services_json || "[]");
+      svcsActuales = parsed.length > 0 ? parsed : [];
+    } catch {}
+    // Si no hay services_json, usamos el servicio único como fallback
+    if (svcsActuales.length === 0 && apt.service_id) {
+      const svc = services.find(s => s.id === apt.service_id);
+      if (svc) svcsActuales = [svc];
+    }
+    setEditAptServices(svcsActuales);
+    setEditApt({ ...apt });
+    setSelApt(null);
+  };
+
+  const handleSaveEditApt = async () => {
+    if (editAptServices.length === 0) {
+      showToast("Selecciona al menos un servicio", "error");
+      return;
+    }
+    const precioTotal   = editAptServices.reduce((sum, s) => sum + Number(s.price), 0);
+    const duracionTotal = editAptServices.reduce((sum, s) => sum + Number(s.duration), 0);
+    const nombres       = editAptServices.map(s => s.name).join(" + ");
+    const emojis        = editAptServices.map(s => s.emoji).join("");
+    try {
+      await appointmentsAPI.updateFull(editApt.id, {
+        serviceIds:    editAptServices.map(s => s.id),
+        serviceName:   nombres,
+        servicePrice:  precioTotal,
+        serviceEmoji:  emojis,
+        totalDuration: duracionTotal,
+        servicesJson:  JSON.stringify(editAptServices),
+        date:          editApt.date,
+        time:          editApt.time,
+        notes:         editApt.notes,
+      });
+      setEditApt(null);
+      await loadAdminData();
+      showToast("Cita actualizada ✓");
     } catch (err) {
       showToast(err.message, "error");
     }
@@ -1651,32 +1718,133 @@ export default function NailProApp() {
           {adminTab === "citas" && (
             <div className="anim-slide-up">
               <div className="section-label">Gestión</div>
-              <h2 className="display-title" style={{ fontSize: 28, marginBottom: 20 }}>
-                Todas las Citas ({allApts.length})
-              </h2>
-              {allApts.map(a => (
-                <div key={a.id} className="card card-lift" style={{ padding: "18px 22px", marginBottom: 12 }}
-                  onClick={() => { setSelApt(a); setSelectedClientPhone(a.phone); loadClientNotes(a.phone); }}>
-                  <div className="row">
-                    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                      <span style={{ fontSize: 28 }}>{a.service_emoji}</span>
-                      <div>
-                        <div className="display-title" style={{ fontSize: 17 }}>{a.client_name}</div>
-                        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 1 }}>{formatDate(a.date)} · {a.time}</div>
-                        <div style={{ fontSize: 12, color: "var(--gold)", marginTop: 1 }}>
-                          {a.service_name} · <strong>{a.service_price}€</strong> · ⏱ {formatDuration(a.total_duration || 60)}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-                      <span className={`badge badge-${a.status}`}>{a.status}</span>
-                      <button className="btn-green" onClick={e => { e.stopPropagation(); openWA(a.phone, waMsg(a).confirmacion); }}>
-                        📲 WA
+              <h2 className="display-title" style={{ fontSize: 28, marginBottom: 16 }}>Todas las Citas</h2>
+
+              {/* Filtros */}
+              <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, color: "var(--gold)", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 8 }}>Período</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {[["todas", "Todas"], ["hoy", "Hoy"], ["semana", "Esta semana"]].map(([val, label]) => (
+                      <button key={val}
+                        onClick={() => setCitasFiltro(val)}
+                        style={{
+                          padding: "7px 14px", borderRadius: 20, fontSize: 12, fontFamily: "var(--ff-body)",
+                          cursor: "pointer", border: "1px solid var(--border2)", transition: "all .2s",
+                          background: citasFiltro === val ? "linear-gradient(135deg, var(--gold), var(--rose))" : "rgba(255,255,255,0.9)",
+                          color: citasFiltro === val ? "var(--noir)" : "var(--cream)",
+                          fontWeight: citasFiltro === val ? 600 : 400,
+                        }}>
+                        {label}
                       </button>
-                    </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--gold)", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 8 }}>Estado</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {[["todas", "Todas"], ["pendiente", "Pendiente"], ["confirmada", "Confirmada"], ["completada", "Completada"], ["cancelada", "Cancelada"]].map(([val, label]) => (
+                      <button key={val}
+                        onClick={() => setCitasEstado(val)}
+                        style={{
+                          padding: "7px 14px", borderRadius: 20, fontSize: 12, fontFamily: "var(--ff-body)",
+                          cursor: "pointer", border: "1px solid var(--border2)", transition: "all .2s",
+                          background: citasEstado === val ? "linear-gradient(135deg, var(--gold), var(--rose))" : "rgba(255,255,255,0.9)",
+                          color: citasEstado === val ? "var(--noir)" : "var(--cream)",
+                          fontWeight: citasEstado === val ? 600 : 400,
+                        }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista filtrada agrupada por día */}
+              {(() => {
+                const hoy = todayStr();
+                const semana = getWeekDays(hoy);
+                let lista = [...apts].sort((a, b) => {
+                  if (a.date !== b.date) return b.date.localeCompare(a.date);
+                  return a.time.localeCompare(b.time);
+                });
+                if (citasFiltro === "hoy")    lista = lista.filter(a => a.date === hoy);
+                if (citasFiltro === "semana") lista = lista.filter(a => semana.includes(a.date));
+                if (citasEstado !== "todas")  lista = lista.filter(a => a.status === citasEstado);
+
+                if (lista.length === 0) return (
+                  <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
+                    <div style={{ fontSize: 36, marginBottom: 10 }}>🔍</div>
+                    <div className="display-title" style={{ fontSize: 18 }}>Sin resultados</div>
+                  </div>
+                );
+
+                // Agrupar por fecha
+                const grupos = lista.reduce((acc, a) => {
+                  if (!acc[a.date]) acc[a.date] = [];
+                  acc[a.date].push(a);
+                  return acc;
+                }, {});
+
+                return Object.entries(grupos).map(([fecha, citas]) => (
+                  <div key={fecha} style={{ marginBottom: 24 }}>
+                    {/* Cabecera del día */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <div style={{
+                        background: fecha === hoy ? "linear-gradient(135deg, var(--gold), var(--rose))" : "rgba(255,255,255,0.9)",
+                        border: "1px solid var(--border2)", borderRadius: 10, padding: "6px 14px",
+                        fontSize: 12, fontWeight: 600,
+                        color: fecha === hoy ? "var(--noir)" : "var(--gold2)",
+                        letterSpacing: ".5px",
+                      }}>
+                        {fecha === hoy ? "🌸 Hoy" : formatDate(fecha)}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{citas.length} cita{citas.length !== 1 ? "s" : ""}</div>
+                    </div>
+
+                    {/* Tarjetas del día */}
+                    {citas.map(a => (
+                      <div key={a.id} className="card" style={{ marginBottom: 8, padding: "14px 16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          {/* Hora */}
+                          <div style={{ minWidth: 42, textAlign: "center" }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--gold2)" }}>{a.time}</div>
+                            <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 2 }}>{formatDuration(a.total_duration || 60)}</div>
+                          </div>
+                          <div style={{ width: 1, alignSelf: "stretch", background: "var(--border2)", margin: "0 4px" }} />
+                          {/* Info */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                              <span style={{ fontSize: 18 }}>{a.service_emoji}</span>
+                              <span className="display-title" style={{ fontSize: 15, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.client_name}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.service_name}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                              <span className={`badge badge-${a.status}`}>{a.status}</span>
+                              <span style={{ fontSize: 12, color: "var(--gold2)", fontWeight: 600 }}>{a.service_price}€</span>
+                            </div>
+                          </div>
+                          {/* Acciones */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 12 }}
+                              onClick={() => { setSelApt(a); setSelectedClientPhone(a.phone); loadClientNotes(a.phone); }}>
+                              👁️
+                            </button>
+                            <button className="btn-ghost" style={{ padding: "6px 10px", fontSize: 12 }}
+                              onClick={() => handleEditApt(a)}>
+                              ✏️
+                            </button>
+                            <button className="btn-danger" style={{ padding: "6px 10px", fontSize: 12 }}
+                              onClick={() => { if (window.confirm(`¿Eliminar la cita de ${a.client_name}?`)) handleDeleteApt(a.id); }}>
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ));
+              })()}
             </div>
           )}
 
@@ -2049,6 +2217,109 @@ export default function NailProApp() {
                   </button>
                 )}
                 <button className="btn-outline" style={{ flex: 1 }} onClick={() => setSelApt(null)}>Cerrar</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="btn-ghost" style={{ flex: 1 }}
+                  onClick={() => handleEditApt(selApt)}>
+                  ✏️ Editar cita
+                </button>
+                <button className="btn-danger" style={{ flex: 1 }}
+                  onClick={() => { if (window.confirm(`¿Eliminar la cita de ${selApt.client_name}?`)) handleDeleteApt(selApt.id); }}>
+                  🗑️ Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE EDICIÓN DE CITA */}
+        {editApt && (
+          <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setEditApt(null); }}>
+            <div className="modal-panel">
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>✏️</div>
+                <h2 className="display-title" style={{ fontSize: 24, marginBottom: 4 }}>Editar cita</h2>
+                <p style={{ fontSize: 13, color: "var(--muted)" }}>{editApt.client_name}</p>
+              </div>
+              <div className="gold-line" />
+
+              {/* Fecha y hora */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                <div className="field">
+                  <label>Fecha</label>
+                  <input className="input" type="date" value={editApt.date}
+                    onChange={e => setEditApt(p => ({ ...p, date: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Hora</label>
+                  <select className="input" value={editApt.time}
+                    onChange={e => setEditApt(p => ({ ...p, time: e.target.value }))}>
+                    {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Servicios */}
+              <div className="field" style={{ marginBottom: 16 }}>
+                <label>Servicios</label>
+                {services.map(s => {
+                  const sel = editAptServices.some(es => es.id === s.id);
+                  return (
+                    <div key={s.id}
+                      onClick={() => setEditAptServices(prev =>
+                        sel ? prev.filter(es => es.id !== s.id) : [...prev, s]
+                      )}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "10px 14px", borderRadius: 10, marginBottom: 6,
+                        border: `1px solid ${sel ? "var(--gold)" : "var(--border2)"}`,
+                        background: sel ? "rgba(194,86,122,0.08)" : "rgba(255,255,255,0.9)",
+                        cursor: "pointer", transition: "all .2s",
+                      }}>
+                      <span style={{ fontSize: 20 }}>{s.emoji}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{s.name}</div>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.duration} min · {s.price}€</div>
+                      </div>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: "50%",
+                        background: sel ? "var(--gold)" : "transparent",
+                        border: `2px solid ${sel ? "var(--gold)" : "var(--border2)"}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 11, color: "var(--noir)",
+                      }}>{sel ? "✓" : ""}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Resumen */}
+              {editAptServices.length > 0 && (
+                <div style={{ background: "rgba(194,86,122,0.06)", border: "1px solid var(--border2)", borderRadius: 10, padding: 12, marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                    <span style={{ color: "var(--muted)" }}>Total</span>
+                    <span style={{ color: "var(--gold2)", fontWeight: 700 }}>
+                      {editAptServices.reduce((s, sv) => s + Number(sv.price), 0)}€ · {formatDuration(editAptServices.reduce((s, sv) => s + Number(sv.duration), 0))}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Notas */}
+              <div className="field" style={{ marginBottom: 16 }}>
+                <label>Notas</label>
+                <textarea className="input" value={editApt.notes || ""}
+                  onChange={e => setEditApt(p => ({ ...p, notes: e.target.value }))}
+                  style={{ minHeight: 70 }} />
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn-outline" style={{ flex: 1 }} onClick={() => setEditApt(null)}>Cancelar</button>
+                <button className="btn-primary" style={{ flex: 2 }}
+                  disabled={editAptServices.length === 0}
+                  onClick={handleSaveEditApt}>
+                  Guardar cambios
+                </button>
               </div>
             </div>
           </div>

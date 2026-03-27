@@ -65,6 +65,7 @@ export const appointmentsAPI = {
   },
   create: (data) => peticion("POST", "/appointments", data),
   updateStatus: (id, status) => peticion("PATCH", `/appointments/${id}/status`, { status }),
+  updateFull: (id, data) => peticion("PUT", `/appointments/${id}`, data),
   delete: (id) => peticion("DELETE", `/appointments/${id}`),
 };
 
